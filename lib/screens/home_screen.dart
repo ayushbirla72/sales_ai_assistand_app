@@ -3,6 +3,7 @@ import 'meeting_history_screen.dart';
 import 'create_meeting_screen.dart';
 import 'voice_samples_screen.dart';
 import 'settings_screen.dart';
+import 'meeting_details_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -132,6 +133,118 @@ class _HomeScreenState extends State<HomeScreen> {
 class HomeContent extends StatelessWidget {
   const HomeContent({super.key});
 
+  void _showJoinZoomDialog(BuildContext context) {
+    final TextEditingController meetingLinkController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Join Zoom Meeting'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: meetingLinkController,
+                decoration: const InputDecoration(
+                  hintText: 'Enter Zoom meeting link',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.video_camera_front),
+                ),
+                keyboardType: TextInputType.url,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Please enter the complete meeting link including https://',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                meetingLinkController.clear();
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (meetingLinkController.text.isNotEmpty) {
+                  // TODO: Implement meeting joining logic
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Joining Zoom meeting...'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Join'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showJoinGoogleMeetDialog(BuildContext context) {
+    final TextEditingController meetingLinkController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Join Google Meet'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: meetingLinkController,
+                decoration: const InputDecoration(
+                  hintText: 'Enter Google Meet link',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.video_call),
+                ),
+                keyboardType: TextInputType.url,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Please enter the complete meeting link including https://',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                meetingLinkController.clear();
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (meetingLinkController.text.isNotEmpty) {
+                  // TODO: Implement meeting joining logic
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Joining Google Meet...'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Join'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,6 +269,102 @@ class HomeContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Live Meetings Section
+            const Text(
+              'Live Meetings',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.video_camera_front, color: Colors.red),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Active Now',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.circle,
+                                color: Colors.red,
+                                size: 8,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: 2,
+                      itemBuilder: (context, index) {
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.blue.withOpacity(0.1),
+                              child: const Icon(
+                                Icons.groups,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            title: Text('Team Meeting ${index + 1}'),
+                            subtitle: Text(
+                              'Started ${index + 1} hour ago • ${3 + index} participants',
+                            ),
+                            trailing: ElevatedButton.icon(
+                              onPressed: () {
+                                // TODO: Join live meeting
+                              },
+                              icon: const Icon(Icons.video_camera_front),
+                              label: const Text('Join'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // Scheduled Meetings Section
             const Text(
               'Scheduled Meetings',
@@ -194,21 +403,55 @@ class HomeContent extends StatelessWidget {
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: 3,
                       itemBuilder: (context, index) {
-                        return ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Colors.blue,
-                            child: Icon(Icons.event, color: Colors.white),
-                          ),
-                          title: Text('Meeting ${index + 1}'),
-                          subtitle: Text(
-                            '${DateTime.now().hour + index}:00 - ${DateTime.now().hour + index + 1}:00',
-                          ),
-                          trailing: ElevatedButton(
-                            onPressed: () {
-                              // TODO: Join meeting
-                            },
-                            child: const Text('Join'),
-                          ),
+                        return StatefulBuilder(
+                          builder: (context, setState) {
+                            bool isEnabled = false;
+                            return ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Colors.blue,
+                                child: Icon(Icons.event, color: Colors.white),
+                              ),
+                              title: Text('Meeting ${index + 1}'),
+                              subtitle: Text(
+                                '${DateTime.now().hour + index}:00 - ${DateTime.now().hour + index + 1}:00',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isEnabled ? 'Enabled' : 'Disabled',
+                                    style: TextStyle(
+                                      color: isEnabled
+                                          ? Colors.green
+                                          : Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: isEnabled,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        isEnabled = value;
+                                      });
+                                      if (value) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'Auto-join enabled for Meeting ${index + 1}'),
+                                            duration:
+                                                const Duration(seconds: 2),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    activeColor: Colors.green,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         );
                       },
                     ),
@@ -231,9 +474,7 @@ class HomeContent extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ElevatedButton.icon(
-                      onPressed: () {
-                        // TODO: Join Zoom meeting
-                      },
+                      onPressed: () => _showJoinZoomDialog(context),
                       icon: const Icon(Icons.video_camera_front),
                       label: const Text('Join Zoom Meeting'),
                       style: ElevatedButton.styleFrom(
@@ -243,9 +484,7 @@ class HomeContent extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () {
-                        // TODO: Join Google Meet
-                      },
+                      onPressed: () => _showJoinGoogleMeetDialog(context),
                       icon: const Icon(Icons.video_camera_front),
                       label: const Text('Join Google Meet'),
                       style: ElevatedButton.styleFrom(
@@ -283,7 +522,16 @@ class HomeContent extends StatelessWidget {
                     ),
                     trailing: const Icon(Icons.arrow_forward_ios),
                     onTap: () {
-                      // TODO: Navigate to meeting details
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MeetingDetailsScreen(
+                            meetingTitle: 'Meeting ${index + 1}',
+                            meetingDate:
+                                DateTime.now().toString().split(' ')[0],
+                          ),
+                        ),
+                      );
                     },
                   ),
                 );
