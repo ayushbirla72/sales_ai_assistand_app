@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:salse_ai_assistant/services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 
 class BaseApiService {
@@ -19,8 +21,11 @@ class BaseApiService {
     };
 
     if (requiresAuth) {
+      final prefs = await SharedPreferences.getInstance();
+      final authService = AuthService(prefs: prefs);
+      final accessToken = authService.getToken();
       // TODO: Get token from secure storage
-      final token = 'YOUR_AUTH_TOKEN';
+      final token = accessToken;
       headers['Authorization'] = 'Bearer $token';
     }
 
