@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
 
 class VoiceSamplesScreen extends StatefulWidget {
   const VoiceSamplesScreen({super.key});
@@ -28,7 +29,24 @@ Hello! I'm excited to tell you about our latest product. It's designed to help b
 Would you like to learn more about how we can help your business grow?
 ''';
 
-  void _startRecording() {
+  Future<bool> _requestMicrophonePermission() async {
+    final status = await Permission.microphone.request();
+    return status.isGranted;
+  }
+
+  Future<void> _startRecording() async {
+    final hasPermission = await _requestMicrophonePermission();
+    if (!hasPermission) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Microphone permission is required to record audio'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isRecording = true;
       _recordingDuration = 0;
