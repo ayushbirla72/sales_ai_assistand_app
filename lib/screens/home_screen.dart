@@ -4,6 +4,9 @@ import 'create_meeting_screen.dart';
 import 'voice_samples_screen.dart';
 import 'settings_screen.dart';
 import 'meeting_details_screen.dart';
+import 'live_suggestions_screen.dart';
+import '../services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +17,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  late AuthService _authService;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAuthService();
+  }
+
+  Future<void> _initializeAuthService() async {
+    final prefs = await SharedPreferences.getInstance();
+    _authService = AuthService(prefs: prefs);
+  }
 
   final List<Widget> _screens = [
     const HomeContent(),
@@ -77,6 +92,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _handleLogout() async {
+    try {
+      await _authService.logout();
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _showLogoutConfirmation(BuildContext context) {
     showDialog(
       context: context,
@@ -94,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                // TODO: Implement logout functionality
+                _handleLogout();
               },
               child: const Text('Logout', style: TextStyle(color: Colors.red)),
             ),
@@ -346,12 +379,21 @@ class HomeContent extends StatelessWidget {
                             ),
                             trailing: ElevatedButton.icon(
                               onPressed: () {
-                                // TODO: Join live meeting
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => LiveSuggestionsScreen(
+                                      meetingTitle: 'Team Meeting ${index + 1}',
+                                      meetingDuration: '${index + 1} hour',
+                                      participantCount: 3 + index,
+                                    ),
+                                  ),
+                                );
                               },
-                              icon: const Icon(Icons.video_camera_front),
-                              label: const Text('Join'),
+                              icon: const Icon(Icons.insights),
+                              label: const Text('Show'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
+                                backgroundColor: Colors.blue,
                                 foregroundColor: Colors.white,
                               ),
                             ),
