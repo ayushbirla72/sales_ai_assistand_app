@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:salse_ai_assistant/services/base_api_service.dart';
+import '../services/file_upload_service.dart';
 
 class VoiceSamplesScreen extends StatefulWidget {
   const VoiceSamplesScreen({super.key});
@@ -17,6 +23,9 @@ class _VoiceSamplesScreenState extends State<VoiceSamplesScreen> {
   bool _isPlaying = false;
   int _playbackPosition = 0;
   Timer? _playbackTimer;
+  String? _recordingPath;
+  final _audioRecorder = AudioRecorder();
+  late final AudioPlayer _audioPlayer;
   final String _sampleText = '''
 Hello! I'm excited to tell you about our latest product. It's designed to help businesses like yours increase efficiency and reduce costs. Our solution offers:
 
@@ -28,13 +37,18 @@ Hello! I'm excited to tell you about our latest product. It's designed to help b
 
 Would you like to learn more about how we can help your business grow?
 ''';
+  final _fileUploadService = FileUploadService();
+  bool _isUploading = false;
+  String? _uploadedFileId;
 
-  Future<bool> _requestMicrophonePermission() async {
-    final status = await Permission.microphone.request();
-    return status.isGranted;
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+    _initRecorder();
   }
 
-  Future<void> _startRecording() async {
+  Future<void> _initRecorder() async {
     final hasPermission = await _requestMicrophonePermission();
     if (!hasPermission) {
       if (!mounted) return;
@@ -44,27 +58,204 @@ Would you like to learn more about how we can help your business grow?
           backgroundColor: Colors.red,
         ),
       );
-      return;
     }
-
-    setState(() {
-      _isRecording = true;
-      _recordingDuration = 0;
-    });
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _recordingDuration++;
-      });
-    });
   }
 
-  void _stopRecording() {
-    _timer?.cancel();
+  Future<bool> _requestMicrophonePermission() async {
+    final status = await Permission.microphone.request();
+    return status.isGranted;
+  }
+
+  Future<String> _getRecordingPath() async {
+    final directory = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return '${directory.path}/recording_$timestamp.m4a';
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      if (await Permission.microphone.isGranted) {
+        _recordingPath = await _getRecordingPath();
+        await _audioRecorder.start(
+          RecordConfig(
+            encoder: AudioEncoder.aacLc,
+            bitRate: 128000,
+            sampleRate: 44100,
+          ),
+          path: _recordingPath!,
+        );
+
+        setState(() {
+          _isRecording = true;
+          _recordingDuration = 0;
+        });
+
+        _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          setState(() {
+            _recordingDuration++;
+          });
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error starting recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      await _audioRecorder.stop();
+      _timer?.cancel();
+
+      setState(() {
+        _isRecording = false;
+        _hasRecording = true;
+      });
+
+      // Upload the recording
+      await _uploadRecording();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error stopping recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _uploadRecording() async {
+    if (_recordingPath == null) return;
+
     setState(() {
-      _isRecording = false;
-      _hasRecording = true;
+      _isUploading = true;
     });
-    // TODO: Save the recording
+
+    try {
+      final file = File(_recordingPath!);
+      if (!await file.exists()) {
+        throw Exception('Recording file not found');
+      }
+
+      final response = await _fileUploadService.uploadSalespersonAudio(
+        file: file,
+        fileType: 'voice_sample',
+        metadata: {
+          'duration': _recordingDuration,
+          'sample_type': 'sales_pitch',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      _uploadedFileId = response['file_id'];
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice sample uploaded successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      print('Error uploading voice sample: $e');
+      final errorMessage =
+          e is ApiException ? e.message : 'An unexpected error occurred';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error uploading voice sample: $errorMessage'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _playRecording() async {
+    try {
+      if (_recordingPath != null) {
+        await _audioPlayer.setFilePath(_recordingPath!);
+        await _audioPlayer.play();
+
+        setState(() {
+          _isPlaying = true;
+        });
+
+        _audioPlayer.playerStateStream.listen((state) {
+          if (state.processingState == ProcessingState.completed) {
+            setState(() {
+              _isPlaying = false;
+            });
+          }
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error playing recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _pauseRecording() async {
+    try {
+      await _audioPlayer.pause();
+      setState(() {
+        _isPlaying = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error pausing recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteRecording() async {
+    try {
+      if (_uploadedFileId != null) {
+        await _fileUploadService.deleteFile(_uploadedFileId!);
+      }
+
+      if (_recordingPath != null) {
+        final file = File(_recordingPath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+
+      setState(() {
+        _hasRecording = false;
+        _recordingPath = null;
+        _uploadedFileId = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting recording: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _showPlayAudioDialog() {
@@ -198,9 +389,9 @@ Would you like to learn more about how we can help your business grow?
               child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
             ),
             TextButton(
-              onPressed: () {
-                _deleteRecording();
+              onPressed: () async {
                 Navigator.of(context).pop();
+                await _deleteRecording();
               },
               child: const Text('Delete', style: TextStyle(color: Colors.red)),
             ),
@@ -208,13 +399,6 @@ Would you like to learn more about how we can help your business grow?
         );
       },
     );
-  }
-
-  void _deleteRecording() {
-    setState(() {
-      _hasRecording = false;
-    });
-    // TODO: Delete the actual recording file
   }
 
   String _formatDuration(int seconds) {
@@ -227,6 +411,8 @@ Would you like to learn more about how we can help your business grow?
   void dispose() {
     _timer?.cancel();
     _playbackTimer?.cancel();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -237,148 +423,182 @@ Would you like to learn more about how we can help your business grow?
         title: const Text('Voice Samples'),
         backgroundColor: Colors.blue,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_hasRecording) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Your Voice Sample',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_hasRecording) ...[
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          const Text(
+                            'Your Voice Sample',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Icon(Icons.mic, color: Colors.blue),
-                              const SizedBox(width: 10),
-                              Text(
-                                'Duration: ${_formatDuration(30)}',
-                                style: const TextStyle(fontSize: 16),
+                              Row(
+                                children: [
+                                  const Icon(Icons.mic, color: Colors.blue),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Duration: ${_formatDuration(_recordingDuration)}',
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.play_arrow),
+                                    onPressed: _isUploading
+                                        ? null
+                                        : _showPlayAudioDialog,
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: _isUploading
+                                        ? null
+                                        : _showDeleteConfirmation,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.play_arrow),
-                                onPressed: _showPlayAudioDialog,
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: _isUploading ? null : _startRecording,
+                    icon: const Icon(Icons.mic),
+                    label: const Text('Record New Sample'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ] else ...[
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Record Your Voice Sample',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Please read the following text:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
-                                onPressed: _showDeleteConfirmation,
-                              ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  _sampleText,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (_isRecording) ...[
+                                const Icon(Icons.mic,
+                                    color: Colors.red, size: 30),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _formatDuration(_recordingDuration),
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ],
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _isUploading
+                                ? null
+                                : (_isRecording
+                                    ? _stopRecording
+                                    : _startRecording),
+                            icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                            label: Text(
+                              _isRecording
+                                  ? 'Stop Recording'
+                                  : 'Start Recording',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  _isRecording ? Colors.red : Colors.blue,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              textStyle: const TextStyle(fontSize: 18),
+                            ),
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
+                ],
+              ],
+            ),
+          ),
+          if (_isUploading)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Uploading voice sample...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _startRecording,
-                icon: const Icon(Icons.mic),
-                label: const Text('Record New Sample'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  textStyle: const TextStyle(fontSize: 18),
-                ),
-              ),
-            ] else ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Record Your Voice Sample',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Please read the following text:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _sampleText,
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (_isRecording) ...[
-                            const Icon(Icons.mic, color: Colors.red, size: 30),
-                            const SizedBox(width: 10),
-                            Text(
-                              _formatDuration(_recordingDuration),
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        onPressed:
-                            _isRecording ? _stopRecording : _startRecording,
-                        icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                        label: Text(
-                          _isRecording ? 'Stop Recording' : 'Start Recording',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              _isRecording ? Colors.red : Colors.blue,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          textStyle: const TextStyle(fontSize: 18),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }

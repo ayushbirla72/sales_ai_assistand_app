@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:salse_ai_assistant/services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -121,6 +122,44 @@ class BaseApiService {
           .timeout(
             Duration(milliseconds: AppConfig.apiTimeout),
           );
+
+      return _handleResponse(response);
+    } catch (e) {
+      _handleError(e);
+    }
+  }
+
+  Future<dynamic> uploadFile(
+    String endpoint,
+    File file, {
+    String? fileName,
+    Map<String, String>? additionalFields,
+    bool requiresAuth = true,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl$endpoint');
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add headers
+      final headers = await _getHeaders(requiresAuth: requiresAuth);
+      request.headers.addAll(headers);
+
+      // Add file
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          file.path,
+          filename: fileName ?? file.path.split('/').last,
+        ),
+      );
+
+      // Add additional fields if any
+      if (additionalFields != null) {
+        request.fields.addAll(additionalFields);
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
 
       return _handleResponse(response);
     } catch (e) {
