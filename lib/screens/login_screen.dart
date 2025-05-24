@@ -269,6 +269,54 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: TextStyle(fontSize: 18, color: Colors.blue),
                           ),
                   ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    icon: Image.asset(
+                      'assets/google_logo.png',
+                      height: 24,
+                      width: 24,
+                    ),
+                    label: const Text(
+                      'Sign in with Google',
+                      style: TextStyle(color: Colors.blue, fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: _isLoading
+                        ? null
+                        : () async {
+                            setState(() => _isLoading = true);
+                            final response =
+                                await _authService.signInWithGoogle();
+                            setState(() => _isLoading = false);
+                            print('Google sign-in response: $response');
+                            if (response != null &&
+                                response['access_token'] != null) {
+                              if (mounted) {
+                                Navigator.pushReplacementNamed(
+                                    context, '/home');
+                              }
+                            } else {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Google sign-in failed or not registered.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                  ),
                   const SizedBox(height: 20),
                   TextButton(
                     onPressed: _isLoading
