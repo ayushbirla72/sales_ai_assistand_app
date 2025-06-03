@@ -1,6 +1,8 @@
 import 'package:logging/logging.dart';
 import 'base_api_service.dart';
 import '../config/app_config.dart';
+import 'dart:async';
+import 'package:intl/intl.dart';
 
 class MeetingService extends BaseApiService {
   final _logger = Logger('MeetingService');
@@ -14,6 +16,7 @@ class MeetingService extends BaseApiService {
     required List<String> topics,
     required DateTime scheduledTime,
     required int numberOfParticipants,
+    String? eventId,
   }) async {
     try {
       final response = await post(
@@ -25,6 +28,7 @@ class MeetingService extends BaseApiService {
           'topics': topics,
           'scheduled_time': scheduledTime.toIso8601String(),
           'participants': numberOfParticipants,
+          if (eventId != null) 'eventId': eventId,
         },
       );
 
@@ -77,5 +81,22 @@ class MeetingService extends BaseApiService {
       _logger.severe('Error deleting meeting: $e');
       rethrow;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getTodayMeetings() async {
+    // TODO: Replace with actual API call
+    await Future.delayed(const Duration(seconds: 1));
+    return [
+      {
+        'title': 'Team Sync',
+        'startTime': '10:00',
+        'endTime': '11:00',
+      },
+      {
+        'title': 'Client Call',
+        'startTime': '13:00',
+        'endTime': '14:00',
+      },
+    ];
   }
 }

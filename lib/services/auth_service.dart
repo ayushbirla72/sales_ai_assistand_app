@@ -12,7 +12,8 @@ class AuthService extends BaseApiService {
       'email',
       'https://www.googleapis.com/auth/calendar.readonly',
       "https://www.googleapis.com/auth/calendar.events.readonly",
-      "https://www.googleapis.com/auth/calendar.events"
+      "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/meetings",
     ],
     serverClientId:
         '907265289147-15moogodguhegvpv5f1du2saees8f7ad.apps.googleusercontent.com',
@@ -230,5 +231,22 @@ class AuthService extends BaseApiService {
 
   Future<void> signOutGoogle() async {
     await _googleSignIn.signOut();
+  }
+
+  /// Silently refreshes the Google access token for calendar API calls.
+  Future<String?> refreshGoogleAccessToken() async {
+    try {
+      final account =
+          _googleSignIn.currentUser ?? await _googleSignIn.signInSilently();
+      if (account == null) {
+        _logger.warning('No Google account signed in.');
+        return null;
+      }
+      final auth = await account.authentication;
+      return auth.accessToken;
+    } catch (e) {
+      _logger.severe('Failed to refresh Google access token: $e');
+      return null;
+    }
   }
 }

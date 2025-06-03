@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import '../services/meeting_service.dart';
 import '../config/app_config.dart';
+import 'package:intl/intl.dart';
+import 'home_screen.dart';
 
 class CreateMeetingScreen extends StatefulWidget {
-  const CreateMeetingScreen({super.key});
+  final Map<String, dynamic>? existingMeeting;
+  final VoidCallback? onMeetingCreated;
+
+  const CreateMeetingScreen({
+    super.key,
+    this.existingMeeting,
+    this.onMeetingCreated,
+  });
 
   @override
   _CreateMeetingScreenState createState() => _CreateMeetingScreenState();
@@ -11,15 +20,38 @@ class CreateMeetingScreen extends StatefulWidget {
 
 class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _detailsController = TextEditingController();
-  final _productDetailsController = TextEditingController();
-  final _topicsController = TextEditingController();
-  final _participantsController = TextEditingController();
-  DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedTime = TimeOfDay.now();
+  late final TextEditingController _titleController;
+  late final TextEditingController _detailsController;
+  late final TextEditingController _productDetailsController;
+  late final TextEditingController _topicsController;
+  late final TextEditingController _participantsController;
+  late DateTime _selectedDate;
+  late TimeOfDay _selectedTime;
   bool _isLoading = false;
   final _meetingService = MeetingService();
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController =
+        TextEditingController(text: widget.existingMeeting?['title']);
+    _detailsController = TextEditingController();
+    _productDetailsController = TextEditingController();
+    _topicsController = TextEditingController();
+    _participantsController = TextEditingController();
+
+    // Parse existing date and time if available
+    if (widget.existingMeeting?['startTime'] != null) {
+      final timeStr = widget.existingMeeting!['startTime'];
+      final timeFormat = DateFormat('hh:mm a');
+      final time = timeFormat.parse(timeStr);
+      _selectedTime = TimeOfDay(hour: time.hour, minute: time.minute);
+    } else {
+      _selectedTime = TimeOfDay.now();
+    }
+
+    _selectedDate = DateTime.now();
+  }
 
   @override
   void dispose() {
@@ -84,6 +116,10 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       // Parse number of participants
       final numberOfParticipants = int.parse(_participantsController.text);
 
+      // Get the event ID from the existing meeting
+      final eventId = widget.existingMeeting?['eventId'];
+
+      // Create meeting with event ID if it exists
       await _meetingService.createMeeting(
         title: _titleController.text,
         details: _detailsController.text,
@@ -91,22 +127,26 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
         topics: topics,
         scheduledTime: scheduledTime,
         numberOfParticipants: numberOfParticipants,
+        eventId: eventId, // Pass the event ID from Google Calendar
       );
 
       if (mounted) {
+        // Call the callback to refresh meetings if provided
+        widget.onMeetingCreated?.call();
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Meeting created successfully!'),
+            content: Text('Meeting details uploaded successfully!'),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pushReplacementNamed(context, '/home');
+        Navigator.pop(context); // Go back to previous screen
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating meeting: ${e.toString()}'),
+            content: Text('Error uploading meeting details: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -237,47 +277,49 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Date and Time Selection
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Meeting Date & Time',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                  // Date and Time Selection - Only show if no existing meeting
+                  if (widget.existingMeeting == null) ...[
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Meeting Date & Time',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () => _selectDate(context),
-                                  icon: const Icon(Icons.calendar_today),
-                                  label: Text(
-                                    '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _selectDate(context),
+                                    icon: const Icon(Icons.calendar_today),
+                                    label: Text(
+                                      '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () => _selectTime(context),
-                                  icon: const Icon(Icons.access_time),
-                                  label: Text(_selectedTime.format(context)),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _selectTime(context),
+                                    icon: const Icon(Icons.access_time),
+                                    label: Text(_selectedTime.format(context)),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
+                  ],
 
                   // Submit Button
                   ElevatedButton.icon(

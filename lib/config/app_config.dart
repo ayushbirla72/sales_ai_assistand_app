@@ -1,6 +1,6 @@
 class AppConfig {
   // API Configuration
-  static const String baseUrl = 'http://192.168.1.9:8000/api';
+  static const String baseUrl = 'http://192.168.1.84:8000/api';
   static const String apiVersion = 'v1';
   static const int apiTimeout = 30000; // 30 seconds
   static const int maxRetries = 3;
@@ -46,9 +46,12 @@ class AppConfig {
   static const String refreshTokenEndpoint = '/auth/refresh';
   static const String logoutEndpoint = '/auth/logout';
   static const String profileEndpoint = '/user/profile';
-  static const String meetingsEndpoint = '/meetings';
+  static const String meetingsEndpoint = '/meet/meetings';
   static const String voiceSamplesEndpoint = '/voice-samples';
   static const String googleLoginEndpoint = '/auth/google/auth';
+
+  static const String googleCalendarEndpointSync = '/calendar/sync-events';
+  static const String googleCalendarEventsEndpoint = '/calendar/google/events';
 
   // File Upload Configuration
   static const int maxFileSize = 10; // MB

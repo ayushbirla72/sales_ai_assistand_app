@@ -7,6 +7,9 @@ import 'meeting_details_screen.dart';
 import 'live_suggestions_screen.dart';
 import '../services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/meeting_service.dart';
+import '../services/calendar_sync_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -163,8 +166,39 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class HomeContent extends StatelessWidget {
+class HomeContent extends StatefulWidget {
   const HomeContent({super.key});
+
+  @override
+  _HomeContentState createState() => _HomeContentState();
+}
+
+class _HomeContentState extends State<HomeContent> {
+  List<dynamic> todayMeetings = [];
+  bool isLoading = false;
+  final MeetingService meetingService = MeetingService();
+  final CalendarSyncService calendarSyncService =
+      CalendarSyncService(GoogleSignIn());
+
+  @override
+  void initState() {
+    super.initState();
+    fetchTodayMeetings();
+  }
+
+  Future<void> fetchTodayMeetings() async {
+    setState(() => isLoading = true);
+    try {
+      final meetings = await calendarSyncService.fetchGoogleCalendarEvents();
+      setState(() {
+        todayMeetings = meetings;
+      });
+    } catch (e) {
+      // Handle error
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
 
   void _showJoinZoomDialog(BuildContext context) {
     final TextEditingController meetingLinkController = TextEditingController();
@@ -273,6 +307,125 @@ class HomeContent extends StatelessWidget {
               child: const Text('Join'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showUploadDetailsDialog(
+      BuildContext context, Map<String, dynamic> meeting) {
+    final TextEditingController titleController =
+        TextEditingController(text: meeting['title']);
+    final TextEditingController descriptionController = TextEditingController();
+    final TextEditingController productDetailsController =
+        TextEditingController();
+    final TextEditingController participantsController =
+        TextEditingController();
+    final TextEditingController topicsController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          insetPadding: EdgeInsets.zero,
+          child: Container(
+            width: MediaQuery.of(context).size.width,
+            height: MediaQuery.of(context).size.height,
+            child: Scaffold(
+              appBar: AppBar(
+                title: const Text('Upload Meeting Details'),
+                backgroundColor: Colors.orange,
+                leading: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      // TODO: Implement upload functionality
+                      final meetingDetails = {
+                        'title': titleController.text,
+                        'description': descriptionController.text,
+                        'productDetails': productDetailsController.text,
+                        'participants':
+                            int.tryParse(participantsController.text) ?? 0,
+                        'topics': topicsController.text
+                            .split(',')
+                            .map((e) => e.trim())
+                            .toList(),
+                      };
+                      print('Uploading meeting details: $meetingDetails');
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content:
+                              Text('Meeting details uploaded successfully'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Upload',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Meeting Title',
+                        border: OutlineInputBorder(),
+                      ),
+                      enabled:
+                          meeting['title'] == null || meeting['title'].isEmpty,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: productDetailsController,
+                      decoration: const InputDecoration(
+                        labelText: 'Product Details',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: participantsController,
+                      decoration: const InputDecoration(
+                        labelText: 'Number of Participants',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: topicsController,
+                      decoration: const InputDecoration(
+                        labelText: 'Topics (comma separated)',
+                        border: OutlineInputBorder(),
+                        hintText: 'e.g., Product Demo, Q&A, Pricing',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -433,70 +586,104 @@ class HomeContent extends StatelessWidget {
                         const Spacer(),
                         IconButton(
                           icon: const Icon(Icons.refresh),
-                          onPressed: () {
-                            // TODO: Refresh calendar
-                          },
+                          onPressed: fetchTodayMeetings,
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 3,
-                      itemBuilder: (context, index) {
-                        return StatefulBuilder(
-                          builder: (context, setState) {
-                            bool isEnabled = false;
-                            return ListTile(
-                              leading: const CircleAvatar(
-                                backgroundColor: Colors.blue,
-                                child: Icon(Icons.event, color: Colors.white),
-                              ),
-                              title: Text('Meeting ${index + 1}'),
-                              subtitle: Text(
-                                '${DateTime.now().hour + index}:00 - ${DateTime.now().hour + index + 1}:00',
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    isEnabled ? 'Enabled' : 'Disabled',
-                                    style: TextStyle(
-                                      color: isEnabled
-                                          ? Colors.green
-                                          : Colors.grey,
-                                      fontSize: 12,
+                    isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: todayMeetings.length,
+                            itemBuilder: (context, index) {
+                              final meeting = todayMeetings[index];
+                              return StatefulBuilder(
+                                builder: (context, setState) {
+                                  bool isEnabled = true;
+                                  return ListTile(
+                                    leading: const CircleAvatar(
+                                      backgroundColor: Colors.blue,
+                                      child: Icon(Icons.event,
+                                          color: Colors.white),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Switch(
-                                    value: isEnabled,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        isEnabled = value;
-                                      });
-                                      if (value) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                                'Auto-join enabled for Meeting ${index + 1}'),
-                                            duration:
-                                                const Duration(seconds: 2),
+                                    title: Text(meeting['title'] ??
+                                        'Meeting ${index + 1}'),
+                                    subtitle: Text(
+                                      '${meeting['startTime']} - ${meeting['endTime']}',
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (meeting[
+                                                'isMeetingDetailsUploaded'] ==
+                                            true)
+                                          Row(
+                                            children: [
+                                              Text(
+                                                'Auto Join',
+                                                style: TextStyle(
+                                                  color: isEnabled
+                                                      ? Colors.green
+                                                      : Colors.grey,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Switch(
+                                                value: isEnabled,
+                                                onChanged: (value) {
+                                                  setState(() {
+                                                    isEnabled = value;
+                                                  });
+                                                  if (value) {
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                            'Auto-join enabled for ${meeting['title']}'),
+                                                        duration:
+                                                            const Duration(
+                                                                seconds: 2),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                                activeColor: Colors.green,
+                                              ),
+                                            ],
+                                          )
+                                        else
+                                          ElevatedButton.icon(
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      CreateMeetingScreen(
+                                                    existingMeeting: meeting,
+                                                    onMeetingCreated:
+                                                        fetchTodayMeetings,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            icon: const Icon(Icons.upload_file),
+                                            label: const Text('Upload'),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.orange,
+                                              foregroundColor: Colors.white,
+                                            ),
                                           ),
-                                        );
-                                      }
-                                    },
-                                    activeColor: Colors.green,
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
                   ],
                 ),
               ),
