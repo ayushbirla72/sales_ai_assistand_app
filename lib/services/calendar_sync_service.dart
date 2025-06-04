@@ -67,6 +67,7 @@ class CalendarSyncService {
           print('Processing event: $event');
           return {
             'id': event['id'] ?? '',
+            'mode': event['mode'] ?? 'offline',
             'eventId': event['eventId'] ?? '',
             'title': event['summary'] ?? 'No Title',
             'startTime': event['start']?['dateTime'] != null
@@ -115,6 +116,140 @@ class CalendarSyncService {
                   false,
             })
         .toList();
+  }
+
+  /// Fetch live meetings that have started today
+  Future<List<Map<String, dynamic>>> fetchLiveMeetings() async {
+    _logger.info('Fetching live meetings');
+    try {
+      final response = await _apiService.get(
+        '/calendar/today-started-meetings',
+      );
+
+      if (response != null && response is List) {
+        final dateFormat = DateFormat('yyyy-MM-dd');
+        final timeFormat = DateFormat('hh:mm a');
+        return response.map((meeting) {
+          final startDate = meeting['start']?['dateTime'] != null
+              ? DateTime.parse(meeting['start']['dateTime'])
+              : null;
+          final endDate = meeting['end']?['dateTime'] != null
+              ? DateTime.parse(meeting['end']['dateTime'])
+              : null;
+
+          // Calculate duration in minutes
+          String duration = '';
+          if (startDate != null && endDate != null) {
+            final difference = endDate.difference(startDate);
+            final hours = difference.inHours;
+            final minutes = difference.inMinutes % 60;
+            if (hours > 0) {
+              duration = '$hours hour${hours > 1 ? 's' : ''}';
+              if (minutes > 0) {
+                duration += ' $minutes min${minutes > 1 ? 's' : ''}';
+              }
+            } else {
+              duration = '$minutes min${minutes > 1 ? 's' : ''}';
+            }
+          }
+
+          return {
+            'id': meeting['_id'] ?? '',
+            'eventId': meeting['id'] ?? '',
+            'title': meeting['summary'] ?? 'No Title',
+            'date': startDate != null ? dateFormat.format(startDate) : '',
+            'startTime': startDate != null ? timeFormat.format(startDate) : '',
+            'endTime': endDate != null ? timeFormat.format(endDate) : '',
+            'duration': duration,
+            'creator': meeting['creator']?['email'] ?? '',
+            'organizer': meeting['organizer']?['email'] ?? '',
+            'status': meeting['status'] ?? '',
+            'isMeetingDetailsUploaded':
+                meeting['isMeetingDetailsUploaded'] ?? false,
+            'autoJoin': meeting['autoJoin'] ?? false,
+            'htmlLink': meeting['htmlLink'] ?? '',
+            'createdAt': meeting['createdAt'] != null
+                ? DateTime.parse(meeting['createdAt'].toString())
+                : null,
+            'updatedAt': meeting['updatedAt'] != null
+                ? DateTime.parse(meeting['updatedAt'].toString())
+                : null,
+          };
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      _logger.severe('Error fetching live meetings: $e');
+      print('Error in fetchLiveMeetings: $e');
+      return [];
+    }
+  }
+
+  /// Fetch completed meetings
+  Future<List<Map<String, dynamic>>> fetchCompletedMeetings() async {
+    _logger.info('Fetching completed meetings');
+    try {
+      final response = await _apiService.get(
+        '/calendar/completed-meetings',
+      );
+
+      if (response != null && response is List) {
+        final dateFormat = DateFormat('yyyy-MM-dd');
+        final timeFormat = DateFormat('hh:mm a');
+        return response.map((meeting) {
+          final startDate = meeting['start']?['dateTime'] != null
+              ? DateTime.parse(meeting['start']['dateTime'])
+              : null;
+          final endDate = meeting['end']?['dateTime'] != null
+              ? DateTime.parse(meeting['end']['dateTime'])
+              : null;
+
+          // Calculate duration in minutes
+          String duration = '';
+          if (startDate != null && endDate != null) {
+            final difference = endDate.difference(startDate);
+            final hours = difference.inHours;
+            final minutes = difference.inMinutes % 60;
+            if (hours > 0) {
+              duration = '$hours hour${hours > 1 ? 's' : ''}';
+              if (minutes > 0) {
+                duration += ' $minutes min${minutes > 1 ? 's' : ''}';
+              }
+            } else {
+              duration = '$minutes min${minutes > 1 ? 's' : ''}';
+            }
+          }
+
+          return {
+            'id': meeting['_id'] ?? '',
+            'eventId': meeting['id'] ?? '',
+            'title': meeting['summary'] ?? 'No Title',
+            'date': startDate != null ? dateFormat.format(startDate) : '',
+            'startTime': startDate != null ? timeFormat.format(startDate) : '',
+            'endTime': endDate != null ? timeFormat.format(endDate) : '',
+            'duration': duration,
+            'creator': meeting['creator']?['email'] ?? '',
+            'organizer': meeting['organizer']?['email'] ?? '',
+            'status': meeting['status'] ?? '',
+            'isMeetingDetailsUploaded':
+                meeting['isMeetingDetailsUploaded'] ?? false,
+            'autoJoin': meeting['autoJoin'] ?? false,
+            'htmlLink': meeting['htmlLink'] ?? '',
+            'createdAt': meeting['createdAt'] != null
+                ? DateTime.parse(meeting['createdAt'].toString())
+                : null,
+            'updatedAt': meeting['updatedAt'] != null
+                ? DateTime.parse(meeting['updatedAt'].toString())
+                : null,
+          };
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      _logger.severe('Error fetching completed meetings: $e');
+      print('Error in fetchCompletedMeetings: $e');
+      return [];
+    }
   }
 }
 

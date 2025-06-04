@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/meeting_service.dart';
 import '../services/calendar_sync_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'meeting_interface_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -175,7 +176,11 @@ class HomeContent extends StatefulWidget {
 
 class _HomeContentState extends State<HomeContent> {
   List<dynamic> todayMeetings = [];
+  List<dynamic> liveMeetings = [];
+  List<dynamic> completedMeetings = [];
   bool isLoading = false;
+  bool isLoadingLiveMeetings = false;
+  bool isLoadingCompletedMeetings = false;
   final MeetingService meetingService = MeetingService();
   final CalendarSyncService calendarSyncService =
       CalendarSyncService(GoogleSignIn());
@@ -183,7 +188,15 @@ class _HomeContentState extends State<HomeContent> {
   @override
   void initState() {
     super.initState();
-    fetchTodayMeetings();
+    _loadAllData();
+  }
+
+  Future<void> _loadAllData() async {
+    await Future.wait([
+      fetchTodayMeetings(),
+      fetchLiveMeetings(),
+      fetchCompletedMeetings(),
+    ]);
   }
 
   Future<void> fetchTodayMeetings() async {
@@ -197,6 +210,48 @@ class _HomeContentState extends State<HomeContent> {
       // Handle error
     } finally {
       setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> fetchLiveMeetings() async {
+    setState(() => isLoadingLiveMeetings = true);
+    try {
+      final meetings = await calendarSyncService.fetchLiveMeetings();
+      setState(() {
+        liveMeetings = meetings;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error fetching live meetings: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => isLoadingLiveMeetings = false);
+    }
+  }
+
+  Future<void> fetchCompletedMeetings() async {
+    setState(() => isLoadingCompletedMeetings = true);
+    try {
+      final meetings = await calendarSyncService.fetchCompletedMeetings();
+      setState(() {
+        completedMeetings = meetings;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error fetching completed meetings: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => isLoadingCompletedMeetings = false);
     }
   }
 
@@ -450,323 +505,491 @@ class _HomeContentState extends State<HomeContent> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Live Meetings Section
-            const Text(
-              'Live Meetings',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.video_camera_front, color: Colors.red),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Active Now',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+      body: RefreshIndicator(
+        onRefresh: _loadAllData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Live Meetings Section
+              const Text(
+                'Live Meetings',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.video_camera_front,
+                              color: Colors.red),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Active Now',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.circle,
-                                color: Colors.red,
-                                size: 8,
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'LIVE',
-                                style: TextStyle(
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.circle,
                                   color: Colors.red,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
+                                  size: 8,
                                 ),
-                              ),
-                            ],
+                                SizedBox(width: 4),
+                                Text(
+                                  'LIVE',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 2,
-                      itemBuilder: (context, index) {
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.blue.withOpacity(0.1),
-                              child: const Icon(
-                                Icons.groups,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            title: Text('Team Meeting ${index + 1}'),
-                            subtitle: Text(
-                              'Started ${index + 1} hour ago • ${3 + index} participants',
-                            ),
-                            trailing: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => LiveSuggestionsScreen(
-                                      meetingTitle: 'Team Meeting ${index + 1}',
-                                      meetingDuration: '${index + 1} hour',
-                                      participantCount: 3 + index,
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      isLoadingLiveMeetings
+                          ? const Center(child: CircularProgressIndicator())
+                          : liveMeetings.isEmpty
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16.0),
+                                    child: Text(
+                                      'No live meetings at the moment',
+                                      style: TextStyle(color: Colors.grey),
                                     ),
                                   ),
-                                );
-                              },
-                              icon: const Icon(Icons.insights),
-                              label: const Text('Show'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Scheduled Meetings Section
-            const Text(
-              'Scheduled Meetings',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.calendar_today, color: Colors.blue),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Today\'s Meetings',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed: fetchTodayMeetings,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: todayMeetings.length,
-                            itemBuilder: (context, index) {
-                              final meeting = todayMeetings[index];
-                              return StatefulBuilder(
-                                builder: (context, setState) {
-                                  bool isEnabled = true;
-                                  return ListTile(
-                                    leading: const CircleAvatar(
-                                      backgroundColor: Colors.blue,
-                                      child: Icon(Icons.event,
-                                          color: Colors.white),
-                                    ),
-                                    title: Text(meeting['title'] ??
-                                        'Meeting ${index + 1}'),
-                                    subtitle: Text(
-                                      '${meeting['startTime']} - ${meeting['endTime']}',
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (meeting[
-                                                'isMeetingDetailsUploaded'] ==
-                                            true)
-                                          Row(
-                                            children: [
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: liveMeetings.length,
+                                  itemBuilder: (context, index) {
+                                    final meeting = liveMeetings[index];
+                                    return Card(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      child: ListTile(
+                                        leading: CircleAvatar(
+                                          backgroundColor:
+                                              Colors.blue.withOpacity(0.1),
+                                          child: const Icon(
+                                            Icons.groups,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                        title: Text(meeting['title'] ??
+                                            'Untitled Meeting'),
+                                        subtitle: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Started: ${meeting['startTime']}',
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                            ),
+                                            if (meeting['duration'].isNotEmpty)
                                               Text(
-                                                'Auto Join',
-                                                style: TextStyle(
-                                                  color: isEnabled
-                                                      ? Colors.green
-                                                      : Colors.grey,
+                                                'Duration: ${meeting['duration']}',
+                                                style: const TextStyle(
+                                                    fontSize: 12),
+                                              ),
+                                            if (meeting['creator'].isNotEmpty)
+                                              Text(
+                                                'Created by: ${meeting['creator']}',
+                                                style: const TextStyle(
                                                   fontSize: 12,
+                                                  color: Colors.grey,
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              Switch(
-                                                value: isEnabled,
-                                                onChanged: (value) {
-                                                  setState(() {
-                                                    isEnabled = value;
-                                                  });
-                                                  if (value) {
-                                                    ScaffoldMessenger.of(
-                                                            context)
-                                                        .showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                            'Auto-join enabled for ${meeting['title']}'),
-                                                        duration:
-                                                            const Duration(
-                                                                seconds: 2),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                                activeColor: Colors.green,
-                                              ),
-                                            ],
-                                          )
-                                        else
-                                          ElevatedButton.icon(
-                                            onPressed: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      CreateMeetingScreen(
-                                                    existingMeeting: meeting,
-                                                    onMeetingCreated:
-                                                        fetchTodayMeetings,
+                                          ],
+                                        ),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (meeting['status'] ==
+                                                'confirmed')
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green
+                                                      .withOpacity(0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: const Text(
+                                                  'Live',
+                                                  style: TextStyle(
+                                                    color: Colors.green,
+                                                    fontSize: 12,
                                                   ),
                                                 ),
-                                              );
-                                            },
-                                            icon: const Icon(Icons.upload_file),
-                                            label: const Text('Upload'),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.orange,
-                                              foregroundColor: Colors.white,
+                                              ),
+                                            const SizedBox(width: 8),
+                                            ElevatedButton.icon(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        LiveSuggestionsScreen(
+                                                      meetingTitle: meeting[
+                                                              'title'] ??
+                                                          'Untitled Meeting',
+                                                      meetingDuration:
+                                                          meeting['duration'],
+                                                      participantCount:
+                                                          0, // TODO: Add participant count if available
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              icon: const Icon(Icons.insights),
+                                              label: const Text('Show'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.blue,
+                                                foregroundColor: Colors.white,
+                                              ),
                                             ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Scheduled Meetings Section
+              const Text(
+                'Scheduled Meetings',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today, color: Colors.blue),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Today\'s Meetings',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            onPressed: fetchTodayMeetings,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: todayMeetings.length,
+                              itemBuilder: (context, index) {
+                                final meeting = todayMeetings[index];
+                                return StatefulBuilder(
+                                  builder: (context, setState) {
+                                    bool isEnabled = true;
+                                    return ListTile(
+                                      leading: const CircleAvatar(
+                                        backgroundColor: Colors.blue,
+                                        child: Icon(Icons.event,
+                                            color: Colors.white),
+                                      ),
+                                      title: Text(meeting['title'] ??
+                                          'Meeting ${index + 1}'),
+                                      subtitle: Text(
+                                        '${meeting['startTime']} - ${meeting['endTime']}',
+                                      ),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (meeting['mode'] == 'Offline')
+                                            ElevatedButton.icon(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        MeetingInterfaceScreen(
+                                                      meetingTitle: meeting[
+                                                              'title'] ??
+                                                          'Untitled Meeting',
+                                                      meetingId:
+                                                          meeting['id'] ?? '',
+                                                      eventId:
+                                                          meeting['eventId'] ??
+                                                              '',
+                                                      isOffline: true,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              icon:
+                                                  const Icon(Icons.play_arrow),
+                                              label: const Text('Start'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.green,
+                                                foregroundColor: Colors.white,
+                                              ),
+                                            )
+                                          else if (meeting[
+                                                  'isMeetingDetailsUploaded'] ==
+                                              true)
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  'Auto Join',
+                                                  style: TextStyle(
+                                                    color: isEnabled
+                                                        ? Colors.green
+                                                        : Colors.grey,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Switch(
+                                                  value: isEnabled,
+                                                  onChanged: (value) {
+                                                    setState(() {
+                                                      isEnabled = value;
+                                                    });
+                                                    if (value) {
+                                                      ScaffoldMessenger.of(
+                                                              context)
+                                                          .showSnackBar(
+                                                        SnackBar(
+                                                          content: Text(
+                                                              'Auto-join enabled for ${meeting['title']}'),
+                                                          duration:
+                                                              const Duration(
+                                                                  seconds: 2),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                  activeColor: Colors.green,
+                                                ),
+                                              ],
+                                            )
+                                          else
+                                            ElevatedButton.icon(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        CreateMeetingScreen(
+                                                      existingMeeting: meeting,
+                                                      onMeetingCreated:
+                                                          fetchTodayMeetings,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              icon:
+                                                  const Icon(Icons.upload_file),
+                                              label: const Text('Upload'),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.orange,
+                                                foregroundColor: Colors.white,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Quick Join Section
+              const Text(
+                'Quick Join',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _showJoinZoomDialog(context),
+                        icon: const Icon(Icons.video_camera_front),
+                        label: const Text('Join Zoom Meeting'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: () => _showJoinGoogleMeetDialog(context),
+                        icon: const Icon(Icons.video_camera_front),
+                        label: const Text('Join Google Meet'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Recent Meetings Section
+              const Text(
+                'Recent Meetings',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              isLoadingCompletedMeetings
+                  ? const Center(child: CircularProgressIndicator())
+                  : completedMeetings.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Text(
+                              'No recent meetings',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: completedMeetings.length,
+                          itemBuilder: (context, index) {
+                            final meeting = completedMeetings[index];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: ListTile(
+                                leading: const CircleAvatar(
+                                  backgroundColor: Colors.blue,
+                                  child: Icon(Icons.meeting_room,
+                                      color: Colors.white),
+                                ),
+                                title: Text(
+                                    meeting['title'] ?? 'Untitled Meeting'),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Date: ${meeting['date']}'),
+                                    Text(
+                                      'Time: ${meeting['startTime']} - ${meeting['endTime']}',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    if (meeting['duration']?.isNotEmpty ??
+                                        false)
+                                      Text(
+                                        'Duration: ${meeting['duration']}',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    if (meeting['creator']?.isNotEmpty ?? false)
+                                      Text(
+                                        'Created by: ${meeting['creator']}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (meeting['status'] == 'confirmed')
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: const Text(
+                                          'Confirmed',
+                                          style: TextStyle(
+                                            color: Colors.green,
+                                            fontSize: 12,
                                           ),
-                                      ],
+                                        ),
+                                      ),
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.arrow_forward_ios,
+                                        size: 16),
+                                  ],
+                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          MeetingDetailsScreen(
+                                        meetingTitle: meeting['title'] ??
+                                            'Untitled Meeting',
+                                        meetingDate: meeting['date'] ?? '',
+                                      ),
                                     ),
                                   );
                                 },
-                              );
-                            },
-                          ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Quick Join Section
-            const Text(
-              'Quick Join',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () => _showJoinZoomDialog(context),
-                      icon: const Icon(Icons.video_camera_front),
-                      label: const Text('Join Zoom Meeting'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: () => _showJoinGoogleMeetDialog(context),
-                      icon: const Icon(Icons.video_camera_front),
-                      label: const Text('Join Google Meet'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Recent Meetings Section
-            const Text(
-              'Recent Meetings',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 5,
-              itemBuilder: (context, index) {
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Colors.blue,
-                      child: Icon(Icons.meeting_room, color: Colors.white),
-                    ),
-                    title: Text('Meeting ${index + 1}'),
-                    subtitle: Text(
-                      'Date: ${DateTime.now().toString().split(' ')[0]}',
-                    ),
-                    trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => MeetingDetailsScreen(
-                            meetingTitle: 'Meeting ${index + 1}',
-                            meetingDate:
-                                DateTime.now().toString().split(' ')[0],
-                          ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
