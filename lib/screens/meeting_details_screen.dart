@@ -1,14 +1,24 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
+
+import '../services/meeting_details_service.dart';
 
 class MeetingDetailsScreen extends StatefulWidget {
   final String meetingTitle;
   final String meetingDate;
+  final String meetingId;
+  final String eventId;
+  final String userId;
 
   const MeetingDetailsScreen({
     super.key,
     required this.meetingTitle,
     required this.meetingDate,
+    required this.meetingId,
+    required this.eventId,
+    required this.userId,
   });
 
   @override
@@ -19,10 +29,63 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  String summary = '';
+  String suggestion = '';
+  List<Map<String, dynamic>> transcript = [];
+
+  bool isLoading = true;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    fetchMeetingData();
+  }
+
+  Future<void> fetchMeetingData() async {
+    print("fetching meeting data");
+    print("meetingId: ${widget.meetingId}");
+    print("eventId: ${widget.eventId}");
+    print("userId: ${widget.userId}");
+
+    final meetingDetailsService = MeetingDetailsService(
+      meetingId: widget.meetingId,
+      userId: widget.userId,
+      eventId: widget.eventId,
+    );
+    try {
+      final meetingData = await meetingDetailsService.fetchMeetingDataApi();
+      if (mounted && meetingData != null) {
+        setState(() {
+          summary = meetingData['summary'] as String? ?? '';
+          suggestion = meetingData['suggestion'] as String? ?? '';
+
+          final result = meetingData['transcript'];
+          if (result is List) {
+            transcript = List<Map<String, dynamic>>.from(result);
+          } else {
+            transcript = [];
+            print(
+                "Warning: 'result' is not a list. Actual type: ${result.runtimeType}");
+          }
+
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Message: ${e.toString()}'),
+            backgroundColor: Colors.amberAccent,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
   }
 
   @override
@@ -36,39 +99,6 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.meetingTitle),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'download_transcript') {
-                _downloadTranscript();
-              } else if (value == 'download_recording') {
-                _downloadRecording();
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'download_transcript',
-                child: Row(
-                  children: [
-                    Icon(Icons.description),
-                    SizedBox(width: 8),
-                    Text('Download Transcript'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'download_recording',
-                child: Row(
-                  children: [
-                    Icon(Icons.video_file),
-                    SizedBox(width: 8),
-                    Text('Download Recording'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -79,35 +109,46 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildSummaryTab(),
-          _buildAnalyticsTab(),
-          _buildSuggestionsTab(),
-          _buildTranscriptTab(),
-        ],
-      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildSummaryTab(),
+                _buildAnalyticsTab(),
+                _buildSuggestionsTab(),
+                _buildTranscriptTab(),
+              ],
+            ),
     );
   }
 
-  void _downloadTranscript() {
-    // TODO: Implement transcript download
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Downloading transcript...'),
-        duration: Duration(seconds: 2),
-      ),
+  Widget _buildSummaryTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Text(summary, style: const TextStyle(fontSize: 16)),
     );
   }
 
-  void _downloadRecording() {
-    // TODO: Implement recording download
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Downloading recording...'),
-        duration: Duration(seconds: 2),
-      ),
+  Widget _buildSuggestionsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Text(suggestion, style: const TextStyle(fontSize: 16)),
+    );
+  }
+
+  Widget _buildTranscriptTab() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: transcript.length,
+      itemBuilder: (context, index) {
+        final entry = transcript[index];
+        return _buildTranscriptMessage(
+          entry['speaker'] ?? 'Unknown',
+          entry['text'] ?? '',
+          '${entry['start'].toStringAsFixed(2)}s - ${entry['end'].toStringAsFixed(2)}s',
+        );
+      },
     );
   }
 
@@ -117,235 +158,49 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildInfoCard(
-            'Meeting Statistics',
-            [
-              'Total Duration: 45 minutes',
-              'Active Participants: 5',
-              'Speaking Time: 35 minutes',
-              'Questions Asked: 8',
-            ],
+          const Text(
+            'Sample Analytics',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
-          const Text(
-            'Speaking Time Distribution',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
           SizedBox(
             height: 300,
             child: PieChart(
               PieChartData(
                 sections: [
                   PieChartSectionData(
-                    value: 40,
-                    title: 'John\n40%',
-                    color: Colors.blue,
-                    radius: 100,
-                  ),
+                      value: 40,
+                      title: 'S1\n40%',
+                      color: Colors.blue,
+                      radius: 80),
                   PieChartSectionData(
-                    value: 25,
-                    title: 'Sarah\n25%',
-                    color: Colors.green,
-                    radius: 100,
-                  ),
+                      value: 30,
+                      title: 'S2\n30%',
+                      color: Colors.green,
+                      radius: 80),
                   PieChartSectionData(
-                    value: 20,
-                    title: 'Mike\n20%',
-                    color: Colors.orange,
-                    radius: 100,
-                  ),
+                      value: 20,
+                      title: 'S3\n20%',
+                      color: Colors.orange,
+                      radius: 80),
                   PieChartSectionData(
-                    value: 15,
-                    title: 'Others\n15%',
-                    color: Colors.purple,
-                    radius: 100,
-                  ),
+                      value: 10,
+                      title: 'Others\n10%',
+                      color: Colors.purple,
+                      radius: 80),
                 ],
                 sectionsSpace: 2,
-                centerSpaceRadius: 40,
+                centerSpaceRadius: 30,
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          _buildInfoCard(
-            'Key Metrics',
-            [
-              'Average Response Time: 2.5 seconds',
-              'Interruptions: 3',
-              'Silence Duration: 5 minutes',
-              'Engagement Score: 85%',
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildInfoCard(
-            'Meeting Overview',
-            [
-              'Date: ${widget.meetingDate}',
-              'Duration: 45 minutes',
-              'Participants: 5',
-              'Platform: Zoom',
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildInfoCard(
-            'Key Points',
-            [
-              'Discussed Q2 sales targets',
-              'Reviewed new product features',
-              'Set action items for next week',
-              'Agreed on follow-up meeting date',
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildInfoCard(
-            'Action Items',
-            [
-              'John to prepare sales report by Friday',
-              'Sarah to schedule demo with client',
-              'Mike to follow up on pricing proposal',
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSuggestionsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSuggestionCard(
-            'Follow-up Actions',
-            'Schedule a follow-up meeting to discuss the implementation timeline.',
-            Icons.calendar_today,
-          ),
-          const SizedBox(height: 16),
-          _buildSuggestionCard(
-            'Resource Allocation',
-            'Consider assigning additional team members to the project based on the scope discussed.',
-            Icons.people,
-          ),
-          const SizedBox(height: 16),
-          _buildSuggestionCard(
-            'Documentation',
-            'Create detailed documentation of the discussed features for the development team.',
-            Icons.description,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTranscriptTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildTranscriptMessage(
-          'John (Host)',
-          'Welcome everyone to our Q2 planning meeting. Let\'s start with the sales targets.',
-          '10:00 AM',
-        ),
-        _buildTranscriptMessage(
-          'Sarah',
-          'I\'ve prepared the current numbers. We\'re at 75% of our target.',
-          '10:02 AM',
-        ),
-        _buildTranscriptMessage(
-          'Mike',
-          'That\'s good progress. What are the main challenges we\'re facing?',
-          '10:05 AM',
-        ),
-        _buildTranscriptMessage(
-          'John (Host)',
-          'Let\'s discuss the new product features we need to implement.',
-          '10:15 AM',
-        ),
-        _buildTranscriptMessage(
-          'Sarah',
-          'I\'ve got the feature list ready. Should I share my screen?',
-          '10:16 AM',
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard(String title, List<String> items) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...items.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.circle, size: 8),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(item)),
-                    ],
-                  ),
-                )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSuggestionCard(String title, String description, IconData icon) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(description),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTranscriptMessage(String speaker, String message, String time) {
+  Widget _buildTranscriptMessage(
+      String speaker, String message, String timeRange) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -356,20 +211,11 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  speaker,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-                Text(
-                  time,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                  ),
-                ),
+                Text(speaker,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.blue)),
+                Text(timeRange,
+                    style: const TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
             const SizedBox(height: 8),

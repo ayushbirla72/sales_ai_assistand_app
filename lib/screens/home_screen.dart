@@ -756,8 +756,9 @@ class _HomeContentState extends State<HomeContent> {
                                                       meetingTitle: meeting[
                                                               'title'] ??
                                                           'Untitled Meeting',
-                                                      meetingId:
-                                                          meeting['id'] ?? '',
+                                                      meetingId: meeting[
+                                                              'meetingId'] ??
+                                                          '',
                                                       eventId:
                                                           meeting['eventId'] ??
                                                               '',
@@ -850,40 +851,41 @@ class _HomeContentState extends State<HomeContent> {
               const SizedBox(height: 24),
 
               // Quick Join Section
-              const Text(
-                'Quick Join',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: () => _showJoinZoomDialog(context),
-                        icon: const Icon(Icons.video_camera_front),
-                        label: const Text('Join Zoom Meeting'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: () => _showJoinGoogleMeetDialog(context),
-                        icon: const Icon(Icons.video_camera_front),
-                        label: const Text('Join Google Meet'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              // const Text(
+              //   'Quick Join',
+              //   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              // ),
+              // const SizedBox(height: 16),
+              // Card(
+              //   child: Padding(
+              //     padding: const EdgeInsets.all(16),
+              //     child: Column(
+              //       crossAxisAlignment: CrossAxisAlignment.stretch,
+              //       children: [
+              //         ElevatedButton.icon(
+              //           onPressed: () => _showJoinZoomDialog(context),
+              //           icon: const Icon(Icons.video_camera_front),
+              //           label: const Text('Join Zoom Meeting'),
+              //           style: ElevatedButton.styleFrom(
+              //             padding: const EdgeInsets.symmetric(vertical: 16),
+              //             backgroundColor: Colors.blue,
+              //           ),
+              //         ),
+              //         const SizedBox(height: 12),
+              //         ElevatedButton.icon(
+              //           onPressed: () => _showJoinGoogleMeetDialog(context),
+              //           icon: const Icon(Icons.video_camera_front),
+              //           label: const Text('Join Google Meet'),
+              //           style: ElevatedButton.styleFrom(
+              //             padding: const EdgeInsets.symmetric(vertical: 16),
+              //             backgroundColor: Colors.red,
+              //           ),
+              //         ),
+              //       ],
+              //     ),
+              //   ),
+              // ),
+
               const SizedBox(height: 24),
 
               // Recent Meetings Section
@@ -947,21 +949,23 @@ class _HomeContentState extends State<HomeContent> {
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (meeting['status'] == 'confirmed')
+                                    // Get the status and corresponding style
+                                    if (meeting['status'] != null)
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
+                                            horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
-                                          color: Colors.green.withOpacity(0.1),
+                                          color:
+                                              _getStatusColor(meeting['status'])
+                                                  .withOpacity(0.1),
                                           borderRadius:
                                               BorderRadius.circular(12),
                                         ),
-                                        child: const Text(
-                                          'Confirmed',
+                                        child: Text(
+                                          _getStatusLabel(meeting['status']),
                                           style: TextStyle(
-                                            color: Colors.green,
+                                            color: _getStatusColor(
+                                                meeting['status']),
                                             fontSize: 12,
                                           ),
                                         ),
@@ -980,6 +984,9 @@ class _HomeContentState extends State<HomeContent> {
                                         meetingTitle: meeting['title'] ??
                                             'Untitled Meeting',
                                         meetingDate: meeting['date'] ?? '',
+                                        meetingId: meeting['meetingId'] ?? '',
+                                        eventId: meeting['eventId'] ?? '',
+                                        userId: meeting['userId'] ?? '',
                                       ),
                                     ),
                                   );
@@ -993,5 +1000,51 @@ class _HomeContentState extends State<HomeContent> {
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+        return Colors.blue;
+      case 'confirmed':
+        return Colors.orange;
+      case 'start':
+        return Colors.orange;
+      case 'progress':
+        return Colors.amber;
+      case 'transcription':
+        return Colors.purple;
+      case 'cancelled':
+        return Colors.red;
+      case 'failed':
+        return Colors.redAccent;
+      case 'completed':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+        return 'Scheduled';
+      case 'start':
+        return 'Started';
+      case 'progress':
+        return 'In Progress';
+      case 'transcription':
+        return 'Transcription';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'failed':
+        return 'Failed';
+      case 'completed':
+        return 'Completed';
+      case 'confirmed':
+        return 'Confirmed';
+      default:
+        return 'Unknown';
+    }
   }
 }

@@ -45,7 +45,7 @@ class CalendarSyncService {
     );
     var items = events.items ?? [];
     final timeFormat = DateFormat('hh:mm a');
-    print(items[0].organizer?.email);
+    // print(items[0].organizer?.email);
     var itemsss = [];
     try {
       final eventList = items.map((event) => event.toJson()).toList();
@@ -69,6 +69,7 @@ class CalendarSyncService {
             'id': event['id'] ?? '',
             'mode': event['mode'] ?? 'offline',
             'eventId': event['eventId'] ?? '',
+            'meetingId': event['meetingId'] ?? '',
             'title': event['summary'] ?? 'No Title',
             'startTime': event['start']?['dateTime'] != null
                 ? timeFormat.format(
@@ -222,7 +223,8 @@ class CalendarSyncService {
 
           return {
             'id': meeting['_id'] ?? '',
-            'eventId': meeting['id'] ?? '',
+            'eventId': meeting['eventId'] ?? '',
+            'meetingId': meeting['meetingId'] ?? '',
             'title': meeting['summary'] ?? 'No Title',
             'date': startDate != null ? dateFormat.format(startDate) : '',
             'startTime': startDate != null ? timeFormat.format(startDate) : '',

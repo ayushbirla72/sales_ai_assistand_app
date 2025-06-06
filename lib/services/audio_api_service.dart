@@ -22,53 +22,71 @@ class AudioApiService extends BaseApiService {
   }
 
   // Send audio chunk to API
-  Future<void> sendAudioChunk(File audioFile) async {
-    if (!_isStreaming || _meetingId == null || _eventId == null) return;
+  Future<Map<String, dynamic>> sendAudioChunk(File audioFile) async {
+    print('Sending audio chunk');
+    print(_meetingId);
+    print(_eventId);
+    print(_isStreaming);
+    if (!_isStreaming || _meetingId == null || _eventId == null) return {};
 
     try {
-      await uploadFile(
-        '/audio/stream',
+      var response = await uploadFile(
+        '/meet/audio-chunk',
         audioFile,
+        fileName: 'chunk_${DateTime.now().millisecondsSinceEpoch}.wav',
         additionalFields: {
           'meetingId': _meetingId!,
           'eventId': _eventId!,
         },
       );
+      return response;
     } catch (e) {
       print('Error sending audio chunk: $e');
       rethrow;
     }
   }
 
-  // Send complete audio file
+  // Send complete audio file and finalize session
   Future<Map<String, dynamic>> sendCompleteAudio(File audioFile) async {
     if (_meetingId == null || _eventId == null) {
       throw Exception('No active meeting or event');
     }
 
     try {
+      print(
+          'Sending complete audio to API with meetingId: $_meetingId and eventId: $_eventId');
+
       final response = await uploadFile(
-        '/audio/complete',
+        '/meet/finalize-session',
         audioFile,
+        fileName: 'complete_${DateTime.now().millisecondsSinceEpoch}.wav',
         additionalFields: {
           'meetingId': _meetingId!,
           'eventId': _eventId!,
         },
       );
 
+      print('API Response for complete audio: $response');
       return response;
     } catch (e) {
-      print('Error sending complete audio: $e');
+      print('Error finalizing session: $e');
       rethrow;
     }
   }
 
   // Get transcript for a meeting
-  Future<Map<String, dynamic>> getTranscript(
-      String meetingId, String eventId) async {
+  Future<List> getTranscript() async {
     try {
-      final response = await get('/transcript/$meetingId/$eventId');
-      return response;
+      if (_meetingId == null || _eventId == null) {
+        throw Exception('No active meeting or event');
+      }
+
+      final response = await get('/sg/transcript/$_meetingId/$_eventId');
+      if (response is List) {
+        return response;
+      } else {
+        return []; // Fallback if API returns wrong format
+      }
     } catch (e) {
       print('Error getting transcript: $e');
       rethrow;
@@ -76,11 +94,18 @@ class AudioApiService extends BaseApiService {
   }
 
   // Get suggestions for a meeting
-  Future<Map<String, dynamic>> getSuggestions(
-      String meetingId, String eventId) async {
+  Future<List> getSuggestions() async {
     try {
-      final response = await get('/suggestions/$meetingId/$eventId');
-      return response;
+      if (_meetingId == null || _eventId == null) {
+        throw Exception('No active meeting or event');
+      }
+
+      final response = await get('/sg/suggestions/$_meetingId/$_eventId');
+      if (response is List) {
+        return response;
+      } else {
+        return [];
+      }
     } catch (e) {
       print('Error getting suggestions: $e');
       rethrow;

@@ -140,7 +140,8 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context); // Go back to previous screen
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+        // Navigator.pop(context); // Go back to previous screen
       }
     } catch (e) {
       if (mounted) {

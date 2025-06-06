@@ -39,12 +39,18 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
   Timer? _chunkTimer;
 
   // Audio recording
-  final _audioRecorder = AudioRecorder();
+  // final _audioRecorder = AudioRecorder();
+  final AudioRecorder _fullRecorder = AudioRecorder(); // For full session
+  final AudioRecorder _chunkRecorder = AudioRecorder(); // For 10-sec chunks
+
+  final Set<String> _seenChunkNames = {};
+
   String? _recordingPath;
   Timer? _amplitudeTimer;
   double _currentAmplitude = 0.0;
   final _audioApiService = AudioApiService();
   String? _currentChunkPath;
+  String? _completeRecordingPath;
   int _chunkCounter = 0;
 
   @override
@@ -56,30 +62,76 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
     )..repeat();
 
     // Simulate live transcript updates
-    Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (isRecording) {
-        setState(() {
-          _transcript.add({
-            'type': 'transcript',
-            'message': 'Sample transcript line ${_transcript.length + 1}',
-            'time': DateTime.now(),
+    Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!isRecording) return;
+
+      try {
+        final chunks =
+            await _audioApiService.getTranscript(); // returns List<dynamic>
+
+        if (chunks != null && chunks.isNotEmpty) {
+          setState(() {
+            for (final chunk in chunks) {
+              final chunkName = chunk['chunk_name']?.toString();
+              final transcript = chunk['transcript']?.toString();
+
+              if (chunkName != null &&
+                  !_seenChunkNames.contains(chunkName) &&
+                  transcript != null &&
+                  transcript.isNotEmpty) {
+                _transcript.add({
+                  'type': 'transcript',
+                  'message': transcript,
+                  'time': DateTime.now(),
+                });
+
+                _seenChunkNames.add(chunkName);
+              }
+            }
+
+            _scrollToBottom(_transcriptController);
           });
-          _scrollToBottom(_transcriptController);
-        });
+        }
+      } catch (e) {
+        print('Error fetching transcript: $e');
       }
     });
 
-    // Simulate suggestion updates
-    Timer.periodic(const Duration(seconds: 3), (timer) {
+    Timer.periodic(const Duration(seconds: 5), (timer) async {
       if (isRecording) {
-        setState(() {
-          _suggestions.add({
-            'type': 'suggestion',
-            'message': 'Suggestion ${_suggestions.length + 1}',
-            'time': DateTime.now(),
-          });
-          _scrollToBottom(_suggestionsController);
-        });
+        try {
+          final List<dynamic> suggestions =
+              await _audioApiService.getSuggestions();
+
+          print("daaaaaaaaaaaaaaaaaaa...... ${suggestions}");
+
+          if (suggestions.isNotEmpty) {
+            setState(() {
+              for (final suggestion in suggestions) {
+                // Use _id['\$oid'] as unique identifier
+                String suggestionId = suggestion['_id'] ?? '';
+
+                // Check if this suggestion _id is already in _suggestions
+                bool alreadyAdded =
+                    _suggestions.any((s) => s['_id'] == suggestionId);
+
+                if (!alreadyAdded && suggestionId.isNotEmpty) {
+                  _suggestions.add({
+                    '_id': suggestionId,
+                    'type': 'suggestion',
+                    'message': suggestion['suggestion'] ??
+                        suggestion['transcript'] ??
+                        '',
+                    'time': DateTime.now(),
+                  });
+                }
+              }
+              _scrollToBottom(_suggestionsController);
+            });
+          }
+        } catch (e) {
+          print('Error fetching suggestions: $e');
+        }
       }
     });
   }
@@ -100,25 +152,53 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
   }
 
   Future<void> _startNewChunk() async {
-    final directory = await getTemporaryDirectory();
-    _currentChunkPath = '${directory.path}/chunk_${_chunkCounter++}.m4a';
+    try {
+      final directory = await getTemporaryDirectory();
+      _currentChunkPath = '${directory.path}/chunk_${_chunkCounter++}.wav';
 
-    await _audioRecorder.start(
-      RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
-      ),
-      path: _currentChunkPath!,
-    );
+      await _chunkRecorder.start(
+        RecordConfig(
+          encoder: AudioEncoder.wav,
+          bitRate: 128000,
+          sampleRate: 44100,
+          numChannels: 1,
+        ),
+        path: _currentChunkPath!,
+      );
+
+      print('Started new chunk at path: $_currentChunkPath');
+    } catch (e) {
+      print('Error starting new chunk: $e');
+      rethrow;
+    }
   }
 
   Future<void> _processChunk() async {
     if (_currentChunkPath != null) {
-      final chunkFile = File(_currentChunkPath!);
-      if (await chunkFile.exists()) {
-        await _audioApiService.sendAudioChunk(chunkFile);
-        await chunkFile.delete(); // Clean up the chunk file
+      try {
+        final chunkFile = File(_currentChunkPath!);
+        if (await chunkFile.exists()) {
+          print('Processing chunk at path: $_currentChunkPath');
+          var response = await _audioApiService.sendAudioChunk(chunkFile);
+
+          // setState(() {
+          //   _transcript.add({
+          //     'type': 'bot',
+          //     'message': response['transcript'] ?? "",
+          //     'time': DateTime.now(),
+          //   });
+          // });
+
+          // _scrollToBottom(_transcriptController);
+
+          await chunkFile.delete(); // Clean up the chunk file
+          print('Chunk processed and deleted successfully');
+        } else {
+          print('Chunk file not found at path: $_currentChunkPath');
+        }
+      } catch (e) {
+        print('Error processing chunk: $e');
+        rethrow;
       }
     }
   }
@@ -126,13 +206,29 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
   Future<void> _startRecording() async {
     try {
       await _requestPermissions();
+
+      // Create path for complete recording
+      final directory = await getTemporaryDirectory();
+      _completeRecordingPath = '${directory.path}/complete_recording.wav';
+
+      // Start the complete recording
+      await _fullRecorder.start(
+        RecordConfig(
+          encoder: AudioEncoder.wav,
+          bitRate: 128000,
+          sampleRate: 44100,
+          numChannels: 1,
+        ),
+        path: _completeRecordingPath!,
+      );
+
       await _audioApiService.startStreaming(widget.meetingId, widget.eventId);
       await _startNewChunk();
 
       // Start chunk timer (10 seconds)
       _chunkTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
         if (isRecording) {
-          await _audioRecorder.stop();
+          await _chunkRecorder.stop();
           await _processChunk();
           await _startNewChunk();
         }
@@ -141,8 +237,8 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
       // Start amplitude monitoring
       _amplitudeTimer =
           Timer.periodic(const Duration(milliseconds: 100), (timer) async {
-        if (await _audioRecorder.isRecording()) {
-          final amplitude = await _audioRecorder.getAmplitude();
+        if (await _chunkRecorder.isRecording()) {
+          final amplitude = await _chunkRecorder.getAmplitude();
           setState(() {
             _currentAmplitude = amplitude.current.abs() / 32768.0;
             for (int i = 0; i < _waveHeights.length; i++) {
@@ -171,19 +267,46 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
 
   Future<void> _stopRecording() async {
     try {
+      // Cancel all timers first
       _chunkTimer?.cancel();
-      await _audioRecorder.stop();
-      await _processChunk(); // Process the final chunk
-      _audioApiService.stopStreaming();
       _amplitudeTimer?.cancel();
 
-      setState(() {
-        isRecording = false;
-        for (int i = 0; i < _waveHeights.length; i++) {
-          _waveHeights[i] = 0;
-        }
-      });
+      // Stop the audio recorder
+      if (await _fullRecorder.isRecording()) {
+        await _fullRecorder.stop();
+      }
+
+      if (await _chunkRecorder.isRecording()) {
+        await _chunkRecorder.stop();
+      }
+
+      // Process the final chunk if it exists
+      if (_currentChunkPath != null) {
+        await _processChunk();
+      }
+
+      // Stop streaming
+      _audioApiService.stopStreaming();
+
+      // Reset state
+      if (mounted) {
+        setState(() {
+          isRecording = false;
+          _currentAmplitude = 0.0;
+          for (int i = 0; i < _waveHeights.length; i++) {
+            _waveHeights[i] = 0;
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recording stopped'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
+      print('Error stopping recording: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -197,11 +320,30 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
 
   Future<void> _completeMeeting() async {
     try {
-      if (_currentChunkPath != null) {
-        final audioFile = File(_currentChunkPath!);
-        if (await audioFile.exists()) {
-          final result = await _audioApiService.sendCompleteAudio(audioFile);
-          // Handle the result (e.g., show success message, update UI)
+      // First stop recording if it's still active
+      if (isRecording) {
+        await _stopRecording();
+      }
+
+      // Ensure we have valid IDs
+      if (widget.meetingId.isEmpty || widget.eventId.isEmpty) {
+        throw Exception('Missing meetingId or eventId');
+      }
+
+      print(
+          'Completing meeting with ID: ${widget.meetingId} and event ID: ${widget.eventId}');
+
+      // Send the complete recording
+      if (_completeRecordingPath != null) {
+        final completeFile = File(_completeRecordingPath!);
+        if (await completeFile.exists()) {
+          print('Sending complete recording from: $_completeRecordingPath');
+          final result = await _audioApiService.sendCompleteAudio(completeFile);
+          print('Meeting completion result: $result');
+
+          // Clean up
+          await completeFile.delete();
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -210,9 +352,14 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
               ),
             );
           }
+        } else {
+          throw Exception('Complete recording file not found');
         }
+      } else {
+        throw Exception('No complete recording path available');
       }
     } catch (e) {
+      print('Error completing meeting: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -236,7 +383,8 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
 
   @override
   void dispose() {
-    _audioRecorder.dispose();
+    _chunkRecorder.dispose();
+    _fullRecorder.dispose();
     _amplitudeTimer?.cancel();
     _chunkTimer?.cancel();
     _animationController.dispose();
@@ -450,7 +598,6 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
               }).toList(),
             ),
           ),
-
           // Live Transcript
           Expanded(
             child: Container(
@@ -519,67 +666,70 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
           ),
 
           // Suggestions
-          Container(
-            height: 120,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.lightbulb_outline,
-                        color: Color(0xFFFFB74D),
-                        size: 24,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Suggestions',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2C3E50),
+          Expanded(
+            child: Container(
+              height: 120,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.lightbulb_outline,
+                          color: Color(0xFFFFB74D),
+                          size: 24,
                         ),
-                      ),
-                      const Spacer(),
-                      if (_suggestions.isNotEmpty)
-                        TextButton.icon(
-                          onPressed: () {
-                            // TODO: Implement suggestion actions
-                          },
-                          icon: const Icon(Icons.more_horiz),
-                          label: const Text('Actions'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF4A90E2),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Suggestions',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2C3E50),
                           ),
                         ),
-                    ],
+                        const Spacer(),
+                        if (_suggestions.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: () {
+                              // TODO: Implement suggestion actions
+                            },
+                            icon: const Icon(Icons.more_horiz),
+                            label: const Text('Actions'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF4A90E2),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _suggestions.length,
-                    itemBuilder: (context, index) {
-                      return _buildBubble(_suggestions[index]);
-                    },
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _suggestionsController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _suggestions.length,
+                      itemBuilder: (context, index) {
+                        return _buildBubble(_suggestions[index]);
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
@@ -618,9 +768,12 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
                   )
                 else
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: _stopRecording,
+                        onPressed: () async {
+                          // await _stopRecording();
+                        },
                         icon: const Icon(Icons.stop),
                         label: const Text('Stop'),
                         style: ElevatedButton.styleFrom(
@@ -637,8 +790,8 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
                       ),
                       const SizedBox(width: 16),
                       ElevatedButton.icon(
-                        onPressed: () {
-                          showDialog(
+                        onPressed: () async {
+                          final shouldComplete = await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
                               title: const Text('Complete Meeting'),
@@ -646,18 +799,12 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
                                   'Are you sure you want to complete this meeting?'),
                               actions: [
                                 TextButton(
-                                  onPressed: () => Navigator.pop(context),
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
                                   child: const Text('Cancel'),
                                 ),
                                 ElevatedButton(
-                                  onPressed: () async {
-                                    Navigator.pop(context);
-                                    await _completeMeeting();
-                                    if (mounted) {
-                                      Navigator.pop(
-                                          context); // Return to previous screen
-                                    }
-                                  },
+                                  onPressed: () => Navigator.pop(context, true),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF4CAF50),
                                     foregroundColor: Colors.white,
@@ -667,6 +814,13 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
                               ],
                             ),
                           );
+
+                          if (shouldComplete == true && mounted) {
+                            await _completeMeeting();
+                            if (mounted) {
+                              Navigator.pop(context);
+                            }
+                          }
                         },
                         icon: const Icon(Icons.check_circle),
                         label: const Text('Complete'),
