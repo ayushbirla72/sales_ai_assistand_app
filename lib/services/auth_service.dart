@@ -14,6 +14,7 @@ class AuthService extends BaseApiService {
       "https://www.googleapis.com/auth/calendar.events.readonly",
       "https://www.googleapis.com/auth/calendar.events",
       "https://www.googleapis.com/auth/meetings",
+      "https://www.googleapis.com/auth/gmail.readonly",
     ],
     serverClientId:
         '907265289147-15moogodguhegvpv5f1du2saees8f7ad.apps.googleusercontent.com',

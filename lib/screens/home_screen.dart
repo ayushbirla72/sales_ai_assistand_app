@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:salse_ai_assistant/services/gmail_sync_service.dart';
 import 'meeting_history_screen.dart';
 import 'create_meeting_screen.dart';
 import 'voice_samples_screen.dart';
@@ -185,6 +186,8 @@ class _HomeContentState extends State<HomeContent> {
   final CalendarSyncService calendarSyncService =
       CalendarSyncService(GoogleSignIn());
 
+  final gmailService = GmailSyncService(GoogleSignIn());
+
   @override
   void initState() {
     super.initState();
@@ -203,6 +206,14 @@ class _HomeContentState extends State<HomeContent> {
     setState(() => isLoading = true);
     try {
       final meetings = await calendarSyncService.fetchGoogleCalendarEvents();
+      final emails = await gmailService.fetchEmailsFromGmail();
+      final SendEmail = await gmailService.sendEmail(
+        to: 'ayushbirla71@gmail.com',
+        subject: 'Email with Attachment',
+        body: 'Please find the attachment.',
+      );
+      print("emailsss  ${emails}");
+
       setState(() {
         todayMeetings = meetings;
       });

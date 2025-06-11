@@ -57,7 +57,7 @@ class AudioApiService extends BaseApiService {
           'Sending complete audio to API with meetingId: $_meetingId and eventId: $_eventId');
 
       final response = await uploadFile(
-        '/meet/finalize-session',
+        '/meet/finalize-offline-session',
         audioFile,
         fileName: 'complete_${DateTime.now().millisecondsSinceEpoch}.wav',
         additionalFields: {

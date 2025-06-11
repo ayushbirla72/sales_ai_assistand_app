@@ -770,25 +770,25 @@ class _MeetingInterfaceScreenState extends State<MeetingInterfaceScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          // await _stopRecording();
-                        },
-                        icon: const Icon(Icons.stop),
-                        label: const Text('Stop'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 16,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
+                      // ElevatedButton.icon(
+                      //   onPressed: () async {
+                      //     // await _stopRecording();
+                      //   },
+                      //   icon: const Icon(Icons.stop),
+                      //   label: const Text('Stop'),
+                      //   style: ElevatedButton.styleFrom(
+                      //     backgroundColor: Colors.red,
+                      //     foregroundColor: Colors.white,
+                      //     padding: const EdgeInsets.symmetric(
+                      //       horizontal: 32,
+                      //       vertical: 16,
+                      //     ),
+                      //     shape: RoundedRectangleBorder(
+                      //       borderRadius: BorderRadius.circular(12),
+                      //     ),
+                      //   ),
+                      // ),
+                      // const SizedBox(width: 16),
                       ElevatedButton.icon(
                         onPressed: () async {
                           final shouldComplete = await showDialog<bool>(

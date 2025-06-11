@@ -30,7 +30,9 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
   late TabController _tabController;
 
   String summary = '';
-  String suggestion = '';
+  // List<Map<String, dynamic>> suggestion = [];
+  Map<String, dynamic> suggestion = {};
+
   List<Map<String, dynamic>> transcript = [];
 
   bool isLoading = true;
@@ -58,7 +60,7 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
       if (mounted && meetingData != null) {
         setState(() {
           summary = meetingData['summary'] as String? ?? '';
-          suggestion = meetingData['suggestion'] as String? ?? '';
+          suggestion = meetingData['suggestion'];
 
           final result = meetingData['transcript'];
           if (result is List) {
@@ -131,9 +133,110 @@ class _MeetingDetailsScreenState extends State<MeetingDetailsScreen>
   }
 
   Widget _buildSuggestionsTab() {
+    final Map<String, dynamic> data = suggestion;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Text(suggestion, style: const TextStyle(fontSize: 16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: data.entries.map((entry) {
+          final isActionItems = entry.key.contains("Action Items");
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.key,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueAccent,
+                ),
+              ),
+              const SizedBox(height: 12),
+              isActionItems
+                  ? _buildActionItemCards(entry.value)
+                  : Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 24),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        entry.value,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildActionItemCards(String value) {
+    final lines = value.trim().split('\n');
+    return Column(
+      children: lines.map((line) {
+        final parts = line.split('|').map((p) => p.trim()).toList();
+        if (parts.length != 3) return SizedBox.shrink();
+
+        final task = parts[0];
+        final person = parts[1];
+        final due = parts[2];
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 6,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Checkbox(
+                value: false,
+                onChanged: (_) {}, // You can manage state if needed
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(task,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        )),
+                    const SizedBox(height: 4),
+                    Text(
+                      "$person · Due: $due",
+                      style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
