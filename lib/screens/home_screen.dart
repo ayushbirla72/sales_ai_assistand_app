@@ -212,12 +212,22 @@ class _HomeContentState extends State<HomeContent> {
         subject: 'Email with Attachment',
         body: 'Please find the attachment.',
       );
-      print("emailsss  ${emails}");
+
+      final sendDraft = await gmailService.createDraft(
+        to: 'ayushbirla71@gmail.com',
+        subject: 'Email with Attachment',
+        body: 'Please find the attachment.',
+      );
+
+      print("draftttt  ${sendDraft}");
+
+      print("emailsss  ${SendEmail}");
 
       setState(() {
         todayMeetings = meetings;
       });
     } catch (e) {
+      print('Error fetching today\'s meetings: $e');
       // Handle error
     } finally {
       setState(() => isLoading = false);

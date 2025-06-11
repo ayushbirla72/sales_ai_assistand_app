@@ -114,41 +114,44 @@ class GmailSyncService {
     return emails;
   }
 
-  /// Creates a draft email in Gmail
   Future<gmail.Draft> createDraft({
     required String to,
     required String subject,
     required String body,
     String? from,
   }) async {
-    final account = await _googleSignIn.signInSilently();
+    final account =
+        await _googleSignIn.signIn(); // Use signIn if scopes updated
     if (account == null) throw Exception('User not signed in');
 
     final client = GoogleHttpClient(await account.authHeaders);
     final gmailApi = gmail.GmailApi(client);
 
-    // Construct MIME message
-    final message = [
-      'From: ${from ?? 'me'}',
-      'To: $to',
-      'Subject: $subject',
-      'Content-Type: text/html; charset=utf-8',
-      'MIME-Version: 1.0',
-      '',
-      body
-    ].join('\n');
+    final rawMessage = '''
+From: ${from ?? 'me'}
+To: $to
+Subject: $subject
+Content-Type: text/html; charset="UTF-8"
+MIME-Version: 1.0
 
-    // Base64 URL-safe encode
+$body
+''';
+
     final encodedMessage = base64Url
-        .encode(message.codeUnits)
+        .encode(utf8.encode(rawMessage))
         .replaceAll('+', '-')
-        .replaceAll('/', '_');
+        .replaceAll('/', '_')
+        .replaceAll('=', ''); // Remove padding for Gmail
 
     final draft = gmail.Draft()
-      ..message = gmail.Message()
-      ..message!.raw = encodedMessage;
+      ..message = (gmail.Message()..raw = encodedMessage); // ✅ FIXED
 
-    return gmailApi.users.drafts.create(draft, 'me');
+    try {
+      return await gmailApi.users.drafts.create(draft, 'me');
+    } catch (e) {
+      print('Failed to create draft: $e');
+      rethrow;
+    }
   }
 
   /// Sends an email directly (without draft)
