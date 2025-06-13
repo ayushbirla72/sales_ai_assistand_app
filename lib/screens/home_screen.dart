@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:salse_ai_assistant/screens/email_screen.dart';
 import 'package:salse_ai_assistant/services/gmail_sync_service.dart';
 import 'meeting_history_screen.dart';
 import 'create_meeting_screen.dart';
@@ -206,22 +207,6 @@ class _HomeContentState extends State<HomeContent> {
     setState(() => isLoading = true);
     try {
       final meetings = await calendarSyncService.fetchGoogleCalendarEvents();
-      final emails = await gmailService.fetchEmailsFromGmail();
-      final SendEmail = await gmailService.sendEmail(
-        to: 'ayushbirla71@gmail.com',
-        subject: 'Email with Attachment',
-        body: 'Please find the attachment.',
-      );
-
-      final sendDraft = await gmailService.createDraft(
-        to: 'ayushbirla71@gmail.com',
-        subject: 'Email with Attachment',
-        body: 'Please find the attachment.',
-      );
-
-      print("draftttt  ${sendDraft}");
-
-      print("emailsss  ${SendEmail}");
 
       setState(() {
         todayMeetings = meetings;
@@ -515,6 +500,17 @@ class _HomeContentState extends State<HomeContent> {
         backgroundColor: Colors.blue,
         actions: [
           IconButton(
+            icon: const Icon(Icons.email),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EmailScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.more_vert),
             onPressed: () {
               final _HomeScreenState? state =
@@ -680,6 +676,12 @@ class _HomeContentState extends State<HomeContent> {
                                                   MaterialPageRoute(
                                                     builder: (context) =>
                                                         LiveSuggestionsScreen(
+                                                      meetingId: meeting[
+                                                              'meetingId'] ??
+                                                          '',
+                                                      eventId:
+                                                          meeting['eventId'] ??
+                                                              '',
                                                       meetingTitle: meeting[
                                                               'title'] ??
                                                           'Untitled Meeting',

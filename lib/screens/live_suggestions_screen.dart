@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:math' as math;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import '../services/audio_api_service.dart';
 
 class LiveSuggestionsScreen extends StatefulWidget {
   final String meetingTitle;
   final String meetingDuration;
   final int participantCount;
+  final String meetingId;
+  final String eventId;
 
   const LiveSuggestionsScreen({
     super.key,
     required this.meetingTitle,
     required this.meetingDuration,
     required this.participantCount,
+    required this.meetingId,
+    required this.eventId,
   });
 
   @override
@@ -19,114 +30,57 @@ class LiveSuggestionsScreen extends StatefulWidget {
 class _LiveSuggestionsScreenState extends State<LiveSuggestionsScreen> {
   final List<Map<String, dynamic>> _suggestions = [];
   final ScrollController _scrollController = ScrollController();
+  Timer? _waveTimer;
+  Timer? _suggestionTimer;
+  final _audioApiService = AudioApiService();
+  Timer? _chunkTimer;
+  final ScrollController _suggestionsController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    // Simulate initial suggestions
-    _addInitialSuggestions();
-    // Start periodic updates
-    _startPeriodicUpdates();
-  }
 
-  void _addInitialSuggestions() {
-    setState(() {
-      _suggestions.addAll([
-        {
-          'type': 'info',
-          'message': 'Meeting started ${widget.meetingDuration} ago',
-          'time': DateTime.now().subtract(const Duration(minutes: 15)),
-        },
-        {
-          'type': 'suggestion',
-          'message':
-              '1. Clarify the meeting objectives:\n• Review the main goals for this session\n• Ensure all participants understand their roles\n• Set clear expectations for outcomes',
-          'time': DateTime.now().subtract(const Duration(minutes: 14)),
-        },
-        {
-          'type': 'warning',
-          'message':
-              '2. Participation imbalance detected:\n• John has spoken for 70% of the time\n• Sarah and Mike have been quiet\n• Consider redistributing speaking opportunities',
-          'time': DateTime.now().subtract(const Duration(minutes: 13)),
-        },
-        {
-          'type': 'suggestion',
-          'message':
-              '3. Suggested discussion structure:\n• Start with a brief agenda review\n• Allocate 5 minutes per topic\n• Leave 10 minutes for Q&A\n• End with action item assignment',
-          'time': DateTime.now().subtract(const Duration(minutes: 12)),
-        },
-        {
-          'type': 'info',
-          'message':
-              '4. Current progress:\n• Completed: Introduction and context\n• In progress: Main discussion points\n• Pending: Action items and next steps',
-          'time': DateTime.now().subtract(const Duration(minutes: 11)),
-        },
-        {
-          'type': 'suggestion',
-          'message':
-              '5. Engagement strategies:\n• Use breakout rooms for smaller discussions\n• Implement a round-robin speaking order\n• Encourage written feedback in chat',
-          'time': DateTime.now().subtract(const Duration(minutes: 10)),
-        },
-      ]);
-    });
-  }
+    Timer.periodic(const Duration(seconds: 5), (timer) async {
+      try {
+        final List<dynamic> suggestions =
+            await _audioApiService.getSuggestions();
 
-  void _startPeriodicUpdates() {
-    Future.delayed(const Duration(seconds: 10), () {
-      if (mounted) {
-        setState(() {
-          final randomSuggestions = [
-            {
-              'type': 'suggestion',
-              'message':
-                  '1. Meeting energy optimization:\n• Consider a 2-minute stretch break\n• Switch to a more interactive format\n• Use polls to engage participants',
-              'time': DateTime.now(),
-            },
-            {
-              'type': 'warning',
-              'message':
-                  '2. Time management alert:\n• 30% of allocated time remaining\n• 2 agenda items pending\n• Consider prioritizing key topics',
-              'time': DateTime.now(),
-            },
-            {
-              'type': 'suggestion',
-              'message':
-                  '3. Documentation recommendations:\n• Capture key decisions made\n• Document action items with owners\n• Share meeting summary within 24 hours',
-              'time': DateTime.now(),
-            },
-            {
-              'type': 'suggestion',
-              'message':
-                  '4. Communication enhancement:\n• Use visual aids for complex topics\n• Share relevant documents in chat\n• Encourage questions in the Q&A section',
-              'time': DateTime.now(),
-            },
-            {
-              'type': 'warning',
-              'message':
-                  '5. Technical considerations:\n• Check audio quality for all participants\n• Ensure screen sharing is visible\n• Verify chat functionality',
-              'time': DateTime.now(),
-            },
-            {
-              'type': 'suggestion',
-              'message':
-                  '6. Follow-up planning:\n• Schedule next steps discussion\n• Assign action item owners\n• Set deadlines for deliverables',
-              'time': DateTime.now(),
-            },
-          ];
+        print("daaaaaaaaaaaaaaaaaaa...... ${suggestions}");
 
-          _suggestions.add(randomSuggestions[
-              DateTime.now().second % randomSuggestions.length]);
-        });
-        _scrollToBottom();
-        _startPeriodicUpdates();
+        if (suggestions.isNotEmpty) {
+          setState(() {
+            for (final suggestion in suggestions) {
+              // Use _id['\$oid'] as unique identifier
+              String suggestionId = suggestion['_id'] ?? '';
+
+              // Check if this suggestion _id is already in _suggestions
+              bool alreadyAdded =
+                  _suggestions.any((s) => s['_id'] == suggestionId);
+
+              if (!alreadyAdded && suggestionId.isNotEmpty) {
+                _suggestions.add({
+                  '_id': suggestionId,
+                  'type': 'suggestion',
+                  'message': suggestion['suggestion'] ??
+                      suggestion['transcript'] ??
+                      '',
+                  'time': DateTime.now(),
+                });
+              }
+            }
+            _scrollToBottom(_suggestionsController);
+          });
+        }
+      } catch (e) {
+        print('Error fetching suggestions: $e');
       }
     });
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+  void _scrollToBottom(ScrollController controller) {
+    if (controller.hasClients) {
+      controller.animateTo(
+        controller.position.maxScrollExtent,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );

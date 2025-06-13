@@ -16,8 +16,10 @@ class GmailSyncService {
   GmailSyncService(this._googleSignIn);
 
   /// Fetch recent Gmail emails
-  Future<List<Map<String, dynamic>>> fetchEmailsFromGmail() async {
-    _logger.info('Fetching emails from Gmail (last 24 hours)');
+  Future<List<Map<String, dynamic>>> fetchEmailsFromGmail(
+      {String label = 'INBOX'}) async {
+    _logger
+        .info('Fetching emails from Gmail (last 24 hours) for label: $label');
     final account = await _googleSignIn.signInSilently();
     if (account == null) {
       _logger.warning('User not signed in to Google');
@@ -37,20 +39,13 @@ class GmailSyncService {
     final messagesList = await gmailApi.users.messages.list(
       'me',
       maxResults: 50,
-      labelIds: ['INBOX'],
+      labelIds: [label],
       q: 'after:$unixTime',
     );
 
-    final sentMessages = await gmailApi.users.messages.list(
-      'me',
-      maxResults: 50,
-      labelIds: ['SENT'],
-      q: 'after:$unixTime',
-    );
+    final allMessages = messagesList.messages;
 
-    final allMessages = [...?messagesList.messages, ...?sentMessages.messages];
-
-    print("Total messages fetched: ${allMessages.length}");
+    print("Total messages fetched: ${allMessages?.length ?? 0}");
     print("Messages in ${json.encode(messagesList.toJson())}");
 
     List<Map<String, dynamic>> emails = [];
@@ -87,6 +82,8 @@ class GmailSyncService {
         formattedDate = DateFormat('yyyy-MM-dd hh:mm a').format(date);
       }
 
+      String body = _getBody(message.payload);
+
       final emailData = {
         'id': message.id,
         'threadId': message.threadId,
@@ -95,6 +92,7 @@ class GmailSyncService {
         'to': to,
         'snippet': message.snippet,
         'date': formattedDate,
+        'body': body,
       };
 
       emails.add(emailData);
@@ -112,6 +110,57 @@ class GmailSyncService {
     }
 
     return emails;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDraftsFromGmail() async {
+    _logger.info('Fetching drafts from Gmail');
+    final account = await _googleSignIn.signInSilently();
+    if (account == null) {
+      _logger.warning('User not signed in to Google');
+      return [];
+    }
+
+    final authHeaders = await account.authHeaders;
+    final client = GoogleHttpClient(authHeaders);
+    final gmailApi = gmail.GmailApi(client);
+
+    final draftsList = await gmailApi.users.drafts.list('me', maxResults: 50);
+
+    List<Map<String, dynamic>> drafts = [];
+
+    for (final draft in draftsList.drafts ?? []) {
+      if (draft.id == null) continue;
+      final draftDetails = await gmailApi.users.drafts.get('me', draft.id!);
+      final message = draftDetails.message;
+      final headers = message?.payload?.headers ?? [];
+
+      String? subject = headers
+          .firstWhere(
+            (h) => h.name?.toLowerCase() == 'subject',
+            orElse: () => gmail.MessagePartHeader(name: 'Subject', value: ''),
+          )
+          .value;
+
+      String? to = headers
+          .firstWhere(
+            (h) => h.name?.toLowerCase() == 'to',
+            orElse: () => gmail.MessagePartHeader(name: 'To', value: ''),
+          )
+          .value;
+
+      String body = _getBody(message?.payload);
+
+      final draftData = {
+        'id': draft.id,
+        'subject': subject,
+        'to': to,
+        'body': body,
+      };
+
+      drafts.add(draftData);
+    }
+    _logger.info('Fetched ${drafts.length} drafts from Gmail');
+    return drafts;
   }
 
   Future<gmail.Draft> createDraft({
@@ -210,6 +259,25 @@ $body
       gmail.Message()..raw = encodedMessage,
       'me',
     );
+  }
+
+  String _getBody(gmail.MessagePart? payload) {
+    String body = '';
+    if (payload == null) {
+      return body;
+    }
+
+    if (payload.mimeType == 'text/plain' || payload.mimeType == 'text/html') {
+      if (payload.body?.data != null) {
+        body = utf8.decode(base64Url.decode(
+            payload.body!.data!.replaceAll('-', '+').replaceAll('_', '/')));
+      }
+    } else if (payload.parts != null) {
+      for (var part in payload.parts!) {
+        body += _getBody(part);
+      }
+    }
+    return body;
   }
 }
 

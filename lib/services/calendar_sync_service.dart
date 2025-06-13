@@ -1,6 +1,7 @@
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:logging/logging.dart';
 import 'package:googleapis/calendar/v3.dart' as calendar;
+import 'package:googleapis/tasks/v1.dart' as tasks;
 import 'base_api_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -117,6 +118,84 @@ class CalendarSyncService {
                   false,
             })
         .toList();
+  }
+
+  Future<bool> createGoogleCalendarEvent({
+    required String title,
+    required DateTime startTime,
+    required DateTime endTime,
+    String? description,
+    String? location,
+    List<String>? attendeeEmails,
+  }) async {
+    _logger.info('Creating an event in Google Calendar');
+    try {
+      final account = await _googleSignIn.signInSilently();
+      if (account == null) {
+        _logger.warning('User not signed in to Google');
+        return false;
+      }
+
+      final authHeaders = await account.authHeaders;
+      final client = GoogleHttpClient(authHeaders);
+      final calendarApi = calendar.CalendarApi(client);
+
+      final event = calendar.Event(
+        summary: title,
+        description: description,
+        location: location,
+        start: calendar.EventDateTime(
+          dateTime: startTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+        end: calendar.EventDateTime(
+          dateTime: endTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+        attendees: attendeeEmails
+            ?.map((email) => calendar.EventAttendee(email: email))
+            .toList(),
+      );
+
+      final createdEvent = await calendarApi.events.insert(event, 'primary');
+      _logger.info('Event created: ${createdEvent.id}');
+      return true;
+    } catch (e) {
+      _logger.severe('Failed to create event: $e');
+      return false;
+    }
+  }
+
+  Future<bool> createGoogleTask({
+    required String title,
+    String? notes,
+    DateTime? dueDate,
+  }) async {
+    _logger.info('Creating a task in Google Tasks');
+    try {
+      final account = await _googleSignIn.signInSilently();
+      if (account == null) {
+        _logger.warning('User not signed in to Google');
+        return false;
+      }
+
+      final authHeaders = await account.authHeaders;
+      final client = GoogleHttpClient(authHeaders);
+      final taskApi = tasks.TasksApi(client);
+
+      final task = tasks.Task(
+        title: title,
+        notes: notes,
+        due: dueDate?.toUtc().toIso8601String(),
+      );
+
+      final createdTask = await taskApi.tasks.insert(task, '@default');
+      _logger.info('Task created: ${createdTask.id}');
+      return true;
+    } catch (e) {
+      _logger.severe('Failed to create task: $e');
+      return false;
+    }
   }
 
   /// Fetch live meetings that have started today
